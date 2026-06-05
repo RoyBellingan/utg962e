@@ -1,0 +1,10 @@
+# UNI-T UTG900E waveform generator (USBTMC)
+# Install: sudo ./setup-access.sh
+#
+# The kernel exposes this as SUBSYSTEM=usbmisc (not usbtmc).
+# idVendor appears as decimal 6656 (= 0x1a00) on some systems.
+
+SUBSYSTEM=="usbmisc", KERNEL=="usbtmc*", ATTRS{idVendor}=="6656", ATTRS{idProduct}=="0834", MODE="0666", SYMLINK+="utg900e"
+
+# Fallback for systems that report hex vendor IDs
+SUBSYSTEM=="usbmisc", KERNEL=="usbtmc*", ATTRS{idVendor}=="1a00", ATTRS{idProduct}=="0834", MODE="0666", SYMLINK+="utg900e"

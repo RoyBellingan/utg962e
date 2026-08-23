@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import fcntl
 import glob
 import os
-import time
+import struct
 from typing import Any
 
-VENDOR_ID = 0x1A00
+VENDOR_ID = 0x6656
 PRODUCT_ID = 0x0834
 VENDOR_ID_SYSFS = "6656"
 PRODUCT_ID_SYSFS = "0834"
+
+# linux/usb/tmc.h — USBTMC_IOC_NR = 91
+def _ioc(direction: int, number: int, size: int = 0) -> int:
+    return (direction << 30) | (size << 16) | (91 << 8) | number
+
+
+_USBTMC_IOCTL_CLEAR = _ioc(0, 2)
+_USBTMC_IOCTL_ABORT_BULK_OUT = _ioc(0, 3)
+_USBTMC_IOCTL_ABORT_BULK_IN = _ioc(0, 4)
+_USBTMC_IOCTL_SET_TIMEOUT = _ioc(1, 10, 4)
+_USBTMC_IOCTL_AUTO_ABORT = _ioc(1, 25, 1)
 
 
 def _usb_ids_match(vendor: str | None, product: str | None) -> bool:
@@ -49,41 +61,71 @@ class _UsbtmcTransport:
                 f"Cannot open {self.device_path}: {exc}. "
                 "Run setup-access.sh with sudo to install udev permissions."
             ) from exc
+        self._configure()
 
     def close(self) -> None:
         if self._fd is not None:
             os.close(self._fd)
             self._fd = None
 
+    def _configure(self) -> None:
+        assert self._fd is not None
+        timeout_ms = max(100, int(self.timeout * 1000))
+        try:
+            fcntl.ioctl(self._fd, _USBTMC_IOCTL_SET_TIMEOUT, struct.pack("I", timeout_ms))
+        except OSError:
+            pass
+        try:
+            fcntl.ioctl(self._fd, _USBTMC_IOCTL_AUTO_ABORT, struct.pack("B", 1))
+        except OSError:
+            pass
+
+    def _recover(self) -> None:
+        if self._fd is None:
+            return
+        for request in (
+            _USBTMC_IOCTL_ABORT_BULK_IN,
+            _USBTMC_IOCTL_ABORT_BULK_OUT,
+            _USBTMC_IOCTL_CLEAR,
+        ):
+            try:
+                fcntl.ioctl(self._fd, request)
+            except OSError:
+                pass
+
     def write(self, command: str) -> None:
         if self._fd is None:
             raise UTG900EError("Transport is not open")
         payload = command if command.endswith("\n") else f"{command}\n"
-        os.write(self._fd, payload.encode("ascii"))
+        try:
+            os.write(self._fd, payload.encode("ascii"))
+        except TimeoutError as exc:
+            self._recover()
+            raise UTG900EError(
+                f"Write to {self.device_path} timed out. "
+                "Unplug and replug the USB cable, then retry."
+            ) from exc
 
     def read(self) -> str:
         if self._fd is None:
             raise UTG900EError("Transport is not open")
 
-        deadline = time.monotonic() + self.timeout
-        chunks: list[bytes] = []
-        while time.monotonic() < deadline:
-            try:
-                chunk = os.read(self._fd, 4096)
-            except BlockingIOError:
-                time.sleep(0.02)
-                continue
-            if not chunk:
-                break
-            chunks.append(chunk)
-            if chunk.endswith(b"\n"):
-                break
-            time.sleep(0.02)
+        # Kernel USBTMC delivers one complete DEV_DEP_MSG_IN per read.
+        # This firmware does not terminate SCPI replies with '\n', so waiting
+        # for a newline issues a second read that times out and wedges the bus.
+        try:
+            chunk = os.read(self._fd, 4096)
+        except TimeoutError as exc:
+            self._recover()
+            raise UTG900EError(
+                f"No response from {self.device_path} (timeout). "
+                "Unplug and replug the USB cable if this persists."
+            ) from exc
 
-        if not chunks:
+        if not chunk:
             raise UTG900EError(f"No response from {self.device_path} (timeout)")
 
-        return b"".join(chunks).decode("ascii", errors="replace").strip()
+        return chunk.decode("ascii", errors="replace").strip()
 
 
 def find_device_path() -> str:

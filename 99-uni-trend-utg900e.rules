@@ -2,7 +2,7 @@
 # Install: sudo ./setup-access.sh
 #
 # The kernel exposes this as SUBSYSTEM=usbmisc (not usbtmc).
-# idVendor appears as decimal 6656 (= 0x1a00) on some systems.
+# USB IDs are vendor 0x6656, product 0x0834.
 
 SUBSYSTEM=="usbmisc", KERNEL=="usbtmc*", ATTRS{idVendor}=="6656", ATTRS{idProduct}=="0834", MODE="0666", SYMLINK+="utg900e"
 

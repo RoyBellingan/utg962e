@@ -190,6 +190,31 @@ def _read_text_file(path: str) -> str | None:
         return handle.read().strip()
 
 
+WAVEFORMS = ("SINe", "SQUare", "PULSe", "RAMP", "ARB", "NOISe", "DC")
+_WAVEFORM_ALIASES = {
+    "sine": "SINe",
+    "sin": "SINe",
+    "square": "SQUare",
+    "pulse": "PULSe",
+    "ramp": "RAMP",
+    "arb": "ARB",
+    "noise": "NOISe",
+    "dc": "DC",
+}
+
+
+def normalize_waveform(waveform: str) -> str:
+    exact = waveform.strip()
+    if exact in WAVEFORMS:
+        return exact
+    alias = _WAVEFORM_ALIASES.get(exact.lower())
+    if alias is None:
+        raise UTG900EError(
+            f"Unknown waveform {waveform!r}. Use one of: {', '.join(WAVEFORMS)}"
+        )
+    return alias
+
+
 class UTG900E:
     """High-level SCPI interface for the UTG900E."""
 
@@ -234,6 +259,19 @@ class UTG900E:
 
     def set_frequency(self, value: float, channel: int = 1) -> None:
         self.write(f":CHANnel{channel}:BASE:FREQuency {value}")
+
+    def get_output(self, channel: int = 1) -> bool:
+        value = self.query(f":CHANnel{channel}:OUTPut?").strip().upper()
+        return value in {"1", "ON"}
+
+    def set_output(self, enabled: bool, channel: int = 1) -> None:
+        self.write(f":CHANnel{channel}:OUTPut {'ON' if enabled else 'OFF'}")
+
+    def get_waveform(self, channel: int = 1) -> str:
+        return self.query(f":CHANnel{channel}:BASE:WAVe?")
+
+    def set_waveform(self, waveform: str, channel: int = 1) -> None:
+        self.write(f":CHANnel{channel}:BASE:WAVe {normalize_waveform(waveform)}")
 
     def get_channel_settings(self, channel: int = 1) -> dict[str, str]:
         queries = {

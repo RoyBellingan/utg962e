@@ -7,7 +7,23 @@ import argparse
 import json
 import sys
 
-from utg900e import UTG900E, UTG900EError
+from utg900e import WAVEFORMS, UTG900E, UTG900EError, normalize_waveform
+
+
+def _on_off(value: str) -> bool:
+    key = value.strip().lower()
+    if key in {"on", "1", "true"}:
+        return True
+    if key in {"off", "0", "false"}:
+        return False
+    raise argparse.ArgumentTypeError("expected on or off")
+
+
+def _waveform(value: str) -> str:
+    try:
+        return normalize_waveform(value)
+    except UTG900EError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def main() -> int:
@@ -41,8 +57,29 @@ def main() -> int:
     freq_set.add_argument("value", type=float, help="Frequency in Hz")
     freq_set.add_argument("--channel", type=int, default=1, choices=(1, 2))
 
-    raw = sub.add_parser("query", help="Send a raw SCPI query")
-    raw.add_argument("scpi", help='SCPI command, e.g. ":CHANnel1:BASE:WAVe?"')
+    out_get = sub.add_parser("get-output", help="Read whether channel output is on")
+    out_get.add_argument("--channel", type=int, default=1, choices=(1, 2))
+
+    out_set = sub.add_parser("set-output", help="Enable or disable channel output")
+    out_set.add_argument("state", type=_on_off, help="on or off")
+    out_set.add_argument("--channel", type=int, default=1, choices=(1, 2))
+
+    wave_get = sub.add_parser("get-waveform", help="Read channel waveform")
+    wave_get.add_argument("--channel", type=int, default=1, choices=(1, 2))
+
+    wave_set = sub.add_parser("set-waveform", help="Set channel waveform")
+    wave_set.add_argument(
+        "waveform",
+        type=_waveform,
+        help=f"Waveform name ({', '.join(WAVEFORMS)})",
+    )
+    wave_set.add_argument("--channel", type=int, default=1, choices=(1, 2))
+
+    raw_q = sub.add_parser("query", help="Send a raw SCPI query and print the reply")
+    raw_q.add_argument("scpi", help='SCPI query, e.g. ":CHANnel1:BASE:WAVe?"')
+
+    raw_w = sub.add_parser("write", help="Send a raw SCPI command with no reply")
+    raw_w.add_argument("scpi", help='SCPI command, e.g. ":CHANnel1:OUTPut OFF"')
 
     args = parser.parse_args()
 
@@ -69,8 +106,20 @@ def main() -> int:
             elif args.command == "set-frequency":
                 inst.set_frequency(args.value, channel=args.channel)
                 print(inst.get_frequency(args.channel))
+            elif args.command == "get-output":
+                print("on" if inst.get_output(args.channel) else "off")
+            elif args.command == "set-output":
+                inst.set_output(args.state, channel=args.channel)
+                print("on" if inst.get_output(args.channel) else "off")
+            elif args.command == "get-waveform":
+                print(inst.get_waveform(args.channel))
+            elif args.command == "set-waveform":
+                inst.set_waveform(args.waveform, channel=args.channel)
+                print(inst.get_waveform(args.channel))
             elif args.command == "query":
                 print(inst.query(args.scpi))
+            elif args.command == "write":
+                inst.write(args.scpi)
     except UTG900EError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

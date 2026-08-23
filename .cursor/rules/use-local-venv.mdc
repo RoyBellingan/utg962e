@@ -1,0 +1,18 @@
+---
+description: Use the project virtualenv for all Python commands
+alwaysApply: true
+---
+
+# Local virtualenv
+
+Always run Python and pip through `.venv` in the repo root. Do not use system `python3` or `pip`.
+
+```bash
+# ✅ GOOD
+.venv/bin/python utg900e_cli.py dump
+.venv/bin/pip install -r requirements.txt
+
+# ❌ BAD
+python3 utg900e_cli.py dump
+pip install -r requirements.txt
+```

@@ -34,6 +34,13 @@ def main() -> int:
     amp_set.add_argument("value", type=float, help="Amplitude in current channel unit (usually Vpp)")
     amp_set.add_argument("--channel", type=int, default=1, choices=(1, 2))
 
+    freq_get = sub.add_parser("get-frequency", help="Read channel frequency in Hz")
+    freq_get.add_argument("--channel", type=int, default=1, choices=(1, 2))
+
+    freq_set = sub.add_parser("set-frequency", help="Set channel frequency")
+    freq_set.add_argument("value", type=float, help="Frequency in Hz")
+    freq_set.add_argument("--channel", type=int, default=1, choices=(1, 2))
+
     raw = sub.add_parser("query", help="Send a raw SCPI query")
     raw.add_argument("scpi", help='SCPI command, e.g. ":CHANnel1:BASE:WAVe?"')
 
@@ -57,6 +64,11 @@ def main() -> int:
             elif args.command == "set-amplitude":
                 inst.set_amplitude(args.value, channel=args.channel)
                 print(inst.get_amplitude(args.channel))
+            elif args.command == "get-frequency":
+                print(inst.get_frequency(args.channel))
+            elif args.command == "set-frequency":
+                inst.set_frequency(args.value, channel=args.channel)
+                print(inst.get_frequency(args.channel))
             elif args.command == "query":
                 print(inst.query(args.scpi))
     except UTG900EError as exc:

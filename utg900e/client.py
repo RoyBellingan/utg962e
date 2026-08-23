@@ -228,6 +228,13 @@ class UTG900E:
     def set_amplitude(self, value: float, channel: int = 1) -> None:
         self.write(f":CHANnel{channel}:BASE:AMPLitude {value}")
 
+    def get_frequency(self, channel: int = 1) -> float:
+        value = self.query(f":CHANnel{channel}:BASE:FREQuency?")
+        return float(value)
+
+    def set_frequency(self, value: float, channel: int = 1) -> None:
+        self.write(f":CHANnel{channel}:BASE:FREQuency {value}")
+
     def get_channel_settings(self, channel: int = 1) -> dict[str, str]:
         queries = {
             "output": f":CHANnel{channel}:OUTPut?",
